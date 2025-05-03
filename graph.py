@@ -2,9 +2,9 @@
 from dotenv import load_dotenv
 from langchain_community.document_loaders import TextLoader
 from langchain_core.agents import AgentFinish
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import (ChatPromptTemplate,
-                                    HumanMessagePromptTemplate, SystemMessagePromptTemplate,
+                                    HumanMessagePromptTemplate, SystemMessagePromptTemplate, 
                                     MessagesPlaceholder)
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import create_react_agent
@@ -12,9 +12,15 @@ from langchain_openai.chat_models import ChatOpenAI
 from langchain_core.tools import tool
 from typing import Annotated, List
 import requests
-
+import smtplib
+from email.mime.text import MIMEText
+from langgraph.prebuilt import ToolNode
+from langchain_core.tools import StructuredTool
+import os
 
 load_dotenv()
+
+
 
 @tool
 def query_prometheus(query: Annotated[str,"Prometheus query in PromQL syntax"]) -> str: 
@@ -27,6 +33,49 @@ def query_prometheus(query: Annotated[str,"Prometheus query in PromQL syntax"]) 
     data = response.json()
     return str(data)
 
+@tool
+def send_email(body: Annotated[str,"Body of an alerting mail"]) -> str:
+    """Send an alerting email regarding the status of Kubernetes cluster to the operation team"""
+
+    msg = MIMEText(body)
+    msg["Subject"] = "Kubernetes Cluster Alert"
+    msg["From"] = os.environ.get("MAIL_FROM")
+    msg["To"] = os.environ.get("MAIL_TO")
+    mail_username = os.environ.get("SMTP_USERNAME")
+    mail_password = os.environ.get("SMTP_PASSWORD")
+
+    try:
+        with smtplib.SMTP(os.environ.get("SMTP_SERVER"), 587) as server:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(mail_username, mail_password)
+                server.send_message(msg)
+        print("Mail sent to the operation team")
+        return "Mail sent to the operation team"
+    except Exception as e:
+     return f"Failed to send email: {str(e)}"
+
+
+def alerting_agent(state: dict): 
+    
+    llm = ChatOpenAI(model="gpt-4.1", temperature=0) 
+    
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            SystemMessage(""" You are a helpful assistant that email with the status of the cluster to the operation team."""),
+            AIMessage(content = state["messages"][-1].content)
+        ]
+    ) 
+    
+    result = prompt | llm.bind_tools(
+    tools=[send_email], tool_choice="send_email")
+    
+    return result
+
+def tool(state: dict): 
+    print(state)
+    return send_email(state.tool_calls[0]["args"])
 
 if __name__ == "__main__":
     
@@ -42,20 +91,35 @@ if __name__ == "__main__":
     
    llm = ChatOpenAI(model="gpt-4.1", temperature=0) 
     
-   agent = create_react_agent(
+   react_agent = create_react_agent(
     model=llm,  
     tools=[query_prometheus],  
     prompt="""You are a helpful assistant that can answer question regarding the status of cluster.
         You can know the status of cluster through the PromQL query to the Prometheus. 
         If you dont know the answer, you can ask the user to provide more information.""",
-    compile = False
     )
    
-   agent.get_graph().draw_mermaid_png(output_file_path="graph.png")
+   tool_node = ToolNode(
+    [
+        send_email
+    ])
    
-   messages = agent.invoke(
+   wrapper = StateGraph(dict)
+   wrapper.add_node("prometheus_agent", react_agent) 
+   wrapper.add_node("alerting_agent", alerting_agent) 
+   wrapper.add_node("execute_tools", tool)
+   wrapper.set_entry_point("prometheus_agent")
+   wrapper.add_edge("prometheus_agent", "alerting_agent") 
+   wrapper.add_edge("alerting_agent", "execute_tools")
+   wrapper.set_finish_point("execute_tools")
+   
+   graph = wrapper.compile() 
+
+   graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
+   
+   messages = graph.invoke(
     {"messages": [{"role": "user", "content": "How many replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
     )
    
-   print(messages["messages"][-1].content)
+   #print(messages["messages"][-1].content)
    
