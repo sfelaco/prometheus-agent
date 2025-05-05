@@ -1,29 +1,23 @@
 
-from dotenv import load_dotenv
-from langchain_community.document_loaders import TextLoader
-from langchain_core.agents import AgentFinish
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.prompts import (ChatPromptTemplate,
-                                    HumanMessagePromptTemplate, SystemMessagePromptTemplate, 
-                                    MessagesPlaceholder)
-from langgraph.graph import END, StateGraph, MessageGraph
-from langgraph.prebuilt import create_react_agent
-from langgraph.prebuilt.chat_agent_executor import AgentState
-from langchain_openai.chat_models import ChatOpenAI
-from langchain_core.tools import tool
-from typing import Annotated, List
-import requests
+import os
 import smtplib
 from email.mime.text import MIMEText
-from langgraph.prebuilt import ToolNode
-from langchain_core.tools import StructuredTool
-import os
-from langchain_core.messages import BaseMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from typing import Annotated
+
+import requests
+from dotenv import load_dotenv
+from langchain_core.messages import SystemMessage
+from langchain_core.prompts import (ChatPromptTemplate,
+                                    MessagesPlaceholder)
+from langchain_core.tools import tool
+from langchain_openai.chat_models import ChatOpenAI
+from langgraph.graph import END, StateGraph
+from langgraph.prebuilt import ToolNode, create_react_agent
+from langgraph.prebuilt.chat_agent_executor import AgentState
 
 load_dotenv()
-
-
+ 
+  
 
 @tool
 def query_prometheus(query: Annotated[str,"Prometheus query in PromQL syntax"]) -> str: 
@@ -134,5 +128,8 @@ if __name__ == "__main__":
     {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
     )
    
+   print("Cluster status:")
+   print(messages["messages"][-2].content)
+   print(" \nAgent evaluation:")
    print(messages["messages"][-1].content)
    
