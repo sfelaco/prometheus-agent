@@ -8,6 +8,7 @@ from langchain_core.prompts import (ChatPromptTemplate,
                                     MessagesPlaceholder)
 from langgraph.graph import END, StateGraph, MessageGraph
 from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt.chat_agent_executor import AgentState
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_core.tools import tool
 from typing import Annotated, List
@@ -18,6 +19,7 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.tools import StructuredTool
 import os
 from langchain_core.messages import BaseMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 load_dotenv()
 
@@ -52,59 +54,54 @@ def send_email(body: Annotated[str,"Body of an alerting mail"]) -> str:
                 server.ehlo()
                 server.login(mail_username, mail_password)
                 server.send_message(msg)
-        print("Mail sent to the operation team")
-        return "Mail sent to the operation team"
+        return "Email sent to the operation team"
     except Exception as e:
      return f"Failed to send email: {str(e)}"
 
 
-def alerting_agent(state: dict): 
+def alerting_agent(state: AgentState): 
     
     llm = ChatOpenAI(model="gpt-4.1", temperature=0) 
     
     prompt = ChatPromptTemplate.from_messages(
         [
-            SystemMessage(""" You are a helpful assistant that email with the status of the cluster to the operation team.
+            SystemMessage(""" You are a helpul assistant that evaluate the status of Kubernetes cluster and can send alerting email to the operation team.
+                              Send the alerting email only if status of the cluster has an critial issues: 
+                                1. The number of replicas of a deployment is less than the desired number of replicas.
+                                2. The number of pods in a node is greater than the maximum number of pods allowed.
+                                3. The CPU usage of a pod is greater than the maximum CPU limit set for that pod.
+                                4. The memory usage of a pod is greater than the maximum memory limit set for that pod.
+                                5. The number of restarts of a pod is greater than the 1. 
+                                
+                                If the status of the cluster is ok, you MUST not send any email, in this case, you should return the message 
+                                "The status of the cluster is ok".
                                 """),
-            AIMessage(content = state["messages"][-1].content)
+            MessagesPlaceholder(variable_name="messages"),
         ]
     ) 
     
     result = prompt | llm.bind_tools(
-        tools=[send_email], tool_choice="send_email")
+        tools=[send_email], tool_choice="auto")
     
-    return result
+    return {"messages": result.invoke({"messages": [state["messages"][-1]]}) }
 
 
 tool_node = ToolNode(tools =[
         send_email
     ], )
 
-def tool(state: dict):
+# def tool(state: AgentState):
         
-    return tool_node.invoke({
-        "messages": [
-            AIMessage(content="", tool_calls=state.tool_calls)
-        ]
-    })
+#     return tool_node.invoke({
+#         "messages": [
+#             AIMessage(content="", tool_calls=state["messages"][-1].tool_calls)
+#         ]
+#     })
 
 
-def should_continue(state:dict):
-    if (hasattr(state, "tool_calls") == False or state.tool_calls == []):
-        return END
-    else:
-        return "execute_tools"
 
 if __name__ == "__main__":
-    
-    
-    # react_prompt = ChatPromptTemplate.from_messages(
-    #     [
-    #         SystemMessagePromptTemplate.from_template_file("prompts/system_message.prompt", input_variables=[""]),
-    #         HumanMessagePromptTemplate(prompt = prompt)
-    #     ]
-    # )   
-    
+
    print("Starting the agent...")
     
    llm = ChatOpenAI(model="gpt-4.1", temperature=0) 
@@ -117,25 +114,24 @@ if __name__ == "__main__":
         If you dont know the answer, you can ask the user to provide more information.""",
     )
       
-   wrapper = StateGraph(dict)
+   wrapper = StateGraph(AgentState)
    wrapper.add_node("prometheus_agent", react_agent) 
    
    wrapper.add_node("alerting_agent", alerting_agent) 
-   wrapper.add_node("execute_tools", tool)
+   wrapper.add_node("execute_tools", tool_node)
    wrapper.set_entry_point("prometheus_agent")
    wrapper.add_edge("prometheus_agent", "alerting_agent") 
-   wrapper.add_conditional_edges("alerting_agent", should_continue)
+   wrapper.add_edge("alerting_agent", "execute_tools")
    wrapper.add_edge("execute_tools", END)
    
    wrapper.set_entry_point("prometheus_agent")
       
    graph = wrapper.compile() 
 
-#    graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
-#    print(graph.get_graph().draw_ascii())
+   graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
    
    messages = graph.invoke(
-    {"messages": [{"role": "user", "content": "How many replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
+    {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
     )
    
    print(messages["messages"][-1].content)
