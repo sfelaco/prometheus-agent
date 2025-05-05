@@ -6,7 +6,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import (ChatPromptTemplate,
                                     HumanMessagePromptTemplate, SystemMessagePromptTemplate, 
                                     MessagesPlaceholder)
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, StateGraph, MessageGraph
 from langgraph.prebuilt import create_react_agent
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_core.tools import tool
@@ -17,6 +17,7 @@ from email.mime.text import MIMEText
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import StructuredTool
 import os
+from langchain_core.messages import BaseMessage
 
 load_dotenv()
 
@@ -69,13 +70,22 @@ def alerting_agent(state: dict):
     ) 
     
     result = prompt | llm.bind_tools(
-    tools=[send_email], tool_choice="send_email")
+        tools=[send_email], tool_choice="send_email")
     
-    return result
+    return result 
 
-def tool(state: dict): 
-    print(state)
-    return send_email(state.tool_calls[0]["args"])
+
+tool_node = ToolNode(tools =[
+        send_email
+    ], )
+
+def tool(state: dict):
+    return tool_node.invoke({
+        "messages": [
+            AIMessage(content="", tool_calls=state.tool_calls)
+        ]
+    })
+
 
 if __name__ == "__main__":
     
@@ -98,19 +108,17 @@ if __name__ == "__main__":
         You can know the status of cluster through the PromQL query to the Prometheus. 
         If you dont know the answer, you can ask the user to provide more information.""",
     )
-   
-   tool_node = ToolNode(
-    [
-        send_email
-    ])
-   
+      
    wrapper = StateGraph(dict)
    wrapper.add_node("prometheus_agent", react_agent) 
+   
    wrapper.add_node("alerting_agent", alerting_agent) 
    wrapper.add_node("execute_tools", tool)
    wrapper.set_entry_point("prometheus_agent")
    wrapper.add_edge("prometheus_agent", "alerting_agent") 
    wrapper.add_edge("alerting_agent", "execute_tools")
+   
+   wrapper.set_entry_point("prometheus_agent")   
    wrapper.set_finish_point("execute_tools")
    
    graph = wrapper.compile() 
