@@ -64,7 +64,8 @@ def alerting_agent(state: dict):
     
     prompt = ChatPromptTemplate.from_messages(
         [
-            SystemMessage(""" You are a helpful assistant that email with the status of the cluster to the operation team."""),
+            SystemMessage(""" You are a helpful assistant that email with the status of the cluster to the operation team.
+                                """),
             AIMessage(content = state["messages"][-1].content)
         ]
     ) 
@@ -72,7 +73,7 @@ def alerting_agent(state: dict):
     result = prompt | llm.bind_tools(
         tools=[send_email], tool_choice="send_email")
     
-    return result 
+    return result
 
 
 tool_node = ToolNode(tools =[
@@ -80,12 +81,19 @@ tool_node = ToolNode(tools =[
     ], )
 
 def tool(state: dict):
+        
     return tool_node.invoke({
         "messages": [
             AIMessage(content="", tool_calls=state.tool_calls)
         ]
     })
 
+
+def should_continue(state:dict):
+    if (hasattr(state, "tool_calls") == False or state.tool_calls == []):
+        return END
+    else:
+        return "execute_tools"
 
 if __name__ == "__main__":
     
@@ -116,18 +124,19 @@ if __name__ == "__main__":
    wrapper.add_node("execute_tools", tool)
    wrapper.set_entry_point("prometheus_agent")
    wrapper.add_edge("prometheus_agent", "alerting_agent") 
-   wrapper.add_edge("alerting_agent", "execute_tools")
+   wrapper.add_conditional_edges("alerting_agent", should_continue)
+   wrapper.add_edge("execute_tools", END)
    
-   wrapper.set_entry_point("prometheus_agent")   
-   wrapper.set_finish_point("execute_tools")
-   
+   wrapper.set_entry_point("prometheus_agent")
+      
    graph = wrapper.compile() 
 
-   graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
+#    graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
+#    print(graph.get_graph().draw_ascii())
    
    messages = graph.invoke(
     {"messages": [{"role": "user", "content": "How many replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
     )
    
-   #print(messages["messages"][-1].content)
+   print(messages["messages"][-1].content)
    
