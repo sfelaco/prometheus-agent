@@ -3,6 +3,7 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from typing import Annotated
+import asyncio
 
 import requests
 from dotenv import load_dotenv
@@ -14,6 +15,7 @@ from langchain_openai.chat_models import ChatOpenAI
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode, create_react_agent
 from langgraph.prebuilt.chat_agent_executor import AgentState
+from langchain_mcp_adapters.client import MultiServerMCPClient
 
 load_dotenv()
  
@@ -93,46 +95,74 @@ tool_node = ToolNode(tools =[
 #     })
 
 
+    
+    
+async def main():
+    
+    async with MultiServerMCPClient(
+    {
+        # "math": {
+        #     "command": "python",
+        #     # Make sure to update to the full absolute path to your math_server.py file
+        #     "args": ["./mcp_server/math_server.py"],
+        #     "transport": "stdio",
+        # },
+        # "weather": {
+        #     # make sure you start your weather server on port 8000
+        #     "url": "http://localhost:8000/sse",
+        #     "transport": "sse",
+        # },
+        "prometheus": {
+            # make sure you start your weather server on port 8000
+            "url": "http://localhost:8000/sse",
+            "transport": "sse",
+        },      
+        
+    }
+) as client:
+
+        llm = ChatOpenAI(model="gpt-4.1", temperature=0) 
+        
+        react_agent = create_react_agent(
+            model=llm,  
+            tools= client.get_tools(),  
+            prompt="""You are a helpful assistant that can answer question regarding the status of cluster.
+                You can know the status of cluster through the PromQL query to the Prometheus. 
+                If you dont know the answer, you can ask the user to provide more information.""",
+            )
+            
+        wrapper = StateGraph(AgentState)
+        wrapper.add_node("prometheus_agent", react_agent) 
+        
+        wrapper.add_node("alerting_agent", alerting_agent) 
+        wrapper.add_node("execute_tools", tool_node)
+        wrapper.set_entry_point("prometheus_agent")
+        wrapper.add_edge("prometheus_agent", "alerting_agent") 
+        wrapper.add_edge("alerting_agent", "execute_tools")
+        wrapper.add_edge("execute_tools", END)
+        
+        wrapper.set_entry_point("prometheus_agent")
+            
+        graph = wrapper.compile() 
+
+        graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
+        
+        #    messages = graph.invoke(
+        #     {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
+        #     )
+        messages = await graph.ainvoke(
+            {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
+            )
+        
+        print("Cluster status:")
+        print(messages["messages"][-2].content)
+        print(" \nAgent evaluation:")
+        print(messages["messages"][-1].content)
+   
+
 
 if __name__ == "__main__":
-
-   print("Starting the agent...")
+    asyncio.run(main())
     
-   llm = ChatOpenAI(model="gpt-4.1", temperature=0) 
     
-   react_agent = create_react_agent(
-    model=llm,  
-    tools=[query_prometheus],  
-    prompt="""You are a helpful assistant that can answer question regarding the status of cluster.
-        You can know the status of cluster through the PromQL query to the Prometheus. 
-        If you dont know the answer, you can ask the user to provide more information.""",
-    )
-      
-   wrapper = StateGraph(AgentState)
-   wrapper.add_node("prometheus_agent", react_agent) 
-   
-   wrapper.add_node("alerting_agent", alerting_agent) 
-   wrapper.add_node("execute_tools", tool_node)
-   wrapper.set_entry_point("prometheus_agent")
-   wrapper.add_edge("prometheus_agent", "alerting_agent") 
-   wrapper.add_edge("alerting_agent", "execute_tools")
-   wrapper.add_edge("execute_tools", END)
-   
-   wrapper.set_entry_point("prometheus_agent")
-      
-   graph = wrapper.compile() 
-
-   graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
-   
-#    messages = graph.invoke(
-#     {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
-#     )
-   messages = graph.invoke(
-    {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
-    )
-   
-   print("Cluster status:")
-   print(messages["messages"][-2].content)
-   print(" \nAgent evaluation:")
-   print(messages["messages"][-1].content)
-   
+    
