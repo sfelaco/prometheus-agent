@@ -22,7 +22,9 @@ dependencies = [
     "flask (>=3.1.0,<4.0.0)",
     "flask-sqlalchemy (>=3.1.1,<4.0.0)",
     "pymysql (>=1.1.1,<2.0.0)",
-    "grandalf (>=0.8,<0.9)"
+    "grandalf (>=0.8,<0.9)",
+    "fastmcp (>=2.3.0,<3.0.0)",
+    "langchain-mcp-adapters (>=0.0.11,<0.0.12)",
 ]
 
 

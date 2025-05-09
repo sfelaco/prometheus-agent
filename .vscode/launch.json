@@ -1,0 +1,31 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Python Debugger: Module",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "prometheus-agent"
+        }
+    ],
+    "python.analysis.fixAll" : ["source.unusedImports"],
+    "emeraldwalk.runonsave": {
+    "commands": [
+        {
+            "match": "\\.py$",
+            "isAsync": true,
+            // Use the full path from above in case it can't find it
+            "cmd": "autoflake --in-place --remove-all-unused-imports \"${file}\""
+        },
+        ]
+    },
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": true,
+      "source.fixAll": true
+    },    
+}

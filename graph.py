@@ -124,6 +124,9 @@ if __name__ == "__main__":
 
    graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
    
+#    messages = graph.invoke(
+#     {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
+#     )
    messages = graph.invoke(
     {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
     )
