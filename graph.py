@@ -61,16 +61,20 @@ def alerting_agent(state: AgentState):
     
     prompt = ChatPromptTemplate.from_messages(
         [
-            SystemMessage(""" You are a helpul assistant that evaluate the status of Kubernetes cluster and can send alerting email to the operation team.
-                              Send the alerting email only if status of the cluster has an critial issues: 
-                                1. The number of replicas of a deployment is less than the desired number of replicas.
-                                2. The number of pods in a node is greater than the maximum number of pods allowed.
-                                3. The CPU usage of a pod is greater than the maximum CPU limit set for that pod.
-                                4. The memory usage of a pod is greater than the maximum memory limit set for that pod.
-                                5. The number of restarts of a pod is greater than the 1. 
-                                
-                                If the status of the cluster is ok, you MUST not send any email, in this case, you should return the message 
-                                "The status of the cluster is ok".
+            SystemMessage(""" 
+            You are a helpful assistant that evaluates the status of a Kubernetes cluster and decides whether to send an alert email to the operations team. 
+
+            Check the cluster status against the following conditions:
+
+            1. The memory used of a pod is greater than the 20% maximum memory limit set for that pod. For example if memory used is 250MB and memory limit is 1GB
+            2. The number of replicas of a deployment is less than the desired number of replicas.
+            3. The number of restarts of a pod exceeds 10.
+
+            If **one or more** of these conditions are met, compose and send an alert email to the operations team specifying the issue(s) detected.
+
+            If **none** of these conditions are met and the cluster status is healthy, **do not send any email** and take no further action.
+
+            Be strictly conservative: only send an email when a real issue is detected. Do not assume issues unless they are clearly present.
                                 """),
             MessagesPlaceholder(variable_name="messages"),
         ]
@@ -128,6 +132,9 @@ async def main():
             tools= client.get_tools(),  
             prompt="""You are a helpful assistant that can answer question regarding the status of cluster.
                 You can know the status of cluster through the PromQL query to the Prometheus. 
+                To avoid to use wrong query get the list of metrics to make sure which metrics are available.
+                To calculate the CPU and memory usage of a pod, you can use the maximium of the CPU and memory usage of all the pods with the same name.
+                If the PromQL is wrong correct it and return the correct one.
                 If you dont know the answer, you can ask the user to provide more information.""",
             )
             
@@ -145,14 +152,18 @@ async def main():
             
         graph = wrapper.compile() 
 
-        graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
+        #graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
         
         #    messages = graph.invoke(
         #     {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
         #     )
+        # messages = await graph.ainvoke(
+        #     {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
+        #     )
         messages = await graph.ainvoke(
-            {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
-            )
+            {"messages": [{"role": "user", 
+                           "content": "What is the memory used from each replicas of j1p-ws-gtw-reg-be deployments in the j1p namespace and what are their memory limits?"}]},
+            )        
         
         print("Cluster status:")
         print(messages["messages"][-2].content)
