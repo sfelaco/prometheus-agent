@@ -10,7 +10,7 @@ from langchain_core.messages import SystemMessage
 from langchain_core.prompts import (ChatPromptTemplate,
                                     MessagesPlaceholder)
 from langchain_core.tools import tool
-from langchain_openai.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode, create_react_agent
 from langgraph.prebuilt.chat_agent_executor import AgentState
@@ -92,37 +92,35 @@ tool_node = ToolNode(tools =[
 #         ]
 #     })
 
+llm = ChatOpenAI(model="gpt-4.1", temperature=0) 
+    
+react_agent = create_react_agent(
+model=llm,  
+tools=[query_prometheus],  
+prompt="""You are a helpful assistant that can answer question regarding the status of cluster.
+    You can know the status of cluster through the PromQL query to the Prometheus. 
+    If you dont know the answer, you can ask the user to provide more information.""",
+)
+    
+wrapper = StateGraph(AgentState)
+wrapper.add_node("prometheus_agent", react_agent) 
 
+wrapper.add_node("alerting_agent", alerting_agent) 
+wrapper.add_node("execute_tools", tool_node)
+wrapper.set_entry_point("prometheus_agent")
+wrapper.add_edge("prometheus_agent", "alerting_agent") 
+wrapper.add_edge("alerting_agent", "execute_tools")
+wrapper.add_edge("execute_tools", END)
+
+wrapper.set_entry_point("prometheus_agent")
+graph = wrapper.compile() 
 
 if __name__ == "__main__":
 
    print("Starting the agent...")
-    
-   llm = ChatOpenAI(model="gpt-4.1", temperature=0) 
-    
-   react_agent = create_react_agent(
-    model=llm,  
-    tools=[query_prometheus],  
-    prompt="""You are a helpful assistant that can answer question regarding the status of cluster.
-        You can know the status of cluster through the PromQL query to the Prometheus. 
-        If you dont know the answer, you can ask the user to provide more information.""",
-    )
-      
-   wrapper = StateGraph(AgentState)
-   wrapper.add_node("prometheus_agent", react_agent) 
    
-   wrapper.add_node("alerting_agent", alerting_agent) 
-   wrapper.add_node("execute_tools", tool_node)
-   wrapper.set_entry_point("prometheus_agent")
-   wrapper.add_edge("prometheus_agent", "alerting_agent") 
-   wrapper.add_edge("alerting_agent", "execute_tools")
-   wrapper.add_edge("execute_tools", END)
-   
-   wrapper.set_entry_point("prometheus_agent")
-      
-   graph = wrapper.compile() 
 
-   graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
+  # graph.get_graph().draw_mermaid_png(output_file_path="graph2.png")
    
 #    messages = graph.invoke(
 #     {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},

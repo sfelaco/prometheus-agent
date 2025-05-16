@@ -5,6 +5,7 @@ description = ""
 authors = [
     {name = "sfelaco"}
 ]
+
 readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
@@ -25,9 +26,28 @@ dependencies = [
     "grandalf (>=0.8,<0.9)",
     "fastmcp (>=2.3.0,<3.0.0)",
     "langchain-mcp-adapters (>=0.0.11,<0.0.12)",
+    "langgraph-cli[inmem] (>=0.2.10,<0.3.0)",
 ]
-
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+
+[tool.setuptools]
+packages = ["langgraph.templates.agent", "agent"]
+[tool.setuptools.package-dir]
+"langgraph.templates.agent" = "./"
+"agent" = "./"
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
+
+[dependency-groups]
+dev = [
+    "anyio>=4.7.0",
+    "langgraph-cli[inmem]>=0.2.8",
+    "mypy>=1.13.0",
+    "pytest>=8.3.5",
+    "ruff>=0.8.2",
+]
