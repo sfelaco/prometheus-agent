@@ -101,35 +101,20 @@ tool_node = ToolNode(tools =[
 
     
     
-async def main():
+async def make_graph():
     
-    async with MultiServerMCPClient(
-    {
-        # "math": {
-        #     "command": "python",
-        #     # Make sure to update to the full absolute path to your math_server.py file
-        #     "args": ["./mcp_server/math_server.py"],
-        #     "transport": "stdio",
-        # },
-        # "weather": {
-        #     # make sure you start your weather server on port 8000
-        #     "url": "http://localhost:8000/sse",
-        #     "transport": "sse",
-        # },
-        "prometheus": {
-            # make sure you start your weather server on port 8000
-            "url": "http://localhost:8000/sse",
-            "transport": "sse",
-        },      
-        
-    }
-) as client:
+        client = MultiServerMCPClient({
+            "prometheus": {
+                "url": "http://localhost:8000/sse",
+                "transport": "sse",
+            }
+        })
 
-        llm = ChatOpenAI(model="gpt-4.1", temperature=0) 
+        llm = ChatOpenAI(model="gpt-4.1-mini", temperature=0) 
         
         react_agent = create_react_agent(
             model=llm,  
-            tools= client.get_tools(),  
+            tools= await client.get_tools(),  
             prompt="""You are a helpful assistant that can answer question regarding the status of cluster.
                 You can know the status of cluster through the PromQL query to the Prometheus. 
                 To avoid to use wrong query get the list of metrics to make sure which metrics are available.
@@ -160,17 +145,33 @@ async def main():
         # messages = await graph.ainvoke(
         #     {"messages": [{"role": "user", "content": "How many desidered and running replicas has the deployment j1p-ws-gtw-reg-be in the j1p namespace?"}]},
         #     )
-        messages = await graph.ainvoke(
-            {"messages": [{"role": "user", 
-                           "content": "What is the memory used from each replicas of j1p-ws-gtw-reg-be deployments in the j1p namespace and what are their memory limits?"}]},
-            )        
+        # messages = await graph.ainvoke(
+        #     {"messages": [{"role": "user", 
+        #                    "content": "What is the memory used from each replicas of j1p-ws-gtw-reg-be deployments in the j1p namespace and what are their memory limits?"}]},
+        #     )        
         
-        print("Cluster status:")
-        print(messages["messages"][-2].content)
-        print(" \nAgent evaluation:")
-        print(messages["messages"][-1].content)
+        # print("Cluster status:")
+        # print(messages["messages"][-2].content)
+        # print(" \nAgent evaluation:")
+        # print(messages["messages"][-1].content)
+        
+        return graph
    
 
+
+async def main():
+    graph = await make_graph()
+
+    messages = await graph.ainvoke(
+        {"messages": [{"role": "user", 
+                        "content": "What is the memory used from each replicas of j1p-ws-gtw-reg-be deployments in the j1p namespace and what are their memory limits?"}]},
+        )        
+    
+    print("Cluster status:")
+    print(messages["messages"][-2].content)
+    print(" \nAgent evaluation:")
+    print(messages["messages"][-1].content)
+    
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -12,7 +12,7 @@
 .env
 /report
 /uploads
-
+.langgraph_api
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
