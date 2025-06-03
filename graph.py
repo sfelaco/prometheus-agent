@@ -117,7 +117,7 @@ async def make_graph():
             tools= await client.get_tools(),  
             prompt="""You are a helpful assistant that can answer question regarding the status of cluster.
                 You can know the status of cluster through the PromQL query to the Prometheus. 
-                To avoid to use wrong query get the list of metrics to make sure which metrics are available.
+                To avoid to use wrong query use "list_metrics" tool to get the list of metrics to make sure which metrics are available.
                 To calculate the CPU and memory usage of a pod, you can use the maximium of the CPU and memory usage of all the pods with the same name.
                 If the PromQL is wrong correct it and return the correct one.
                 If you dont know the answer, you can ask the user to provide more information.""",
